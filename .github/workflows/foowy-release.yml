@@ -14,6 +14,12 @@ jobs:
         with:
           ref: main
 
+      - name: Get main SHA
+        id: meta
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -59,7 +65,7 @@ jobs:
       - name: Build APK (split per ABI)
         run: |
           flutter build apk --release --split-per-abi \
-            --dart-define=GIT_COMMIT=${{ github.sha }}
+            --dart-define=GIT_COMMIT=${{ steps.meta.outputs.sha }}
 
       - name: Clean up signing files
         if: always()
@@ -72,13 +78,13 @@ jobs:
           cp build/app/outputs/flutter-apk/app-x86_64-release.apk plezy-x86_64.apk
 
       - name: Create rolling release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: latest-fork
           name: Latest fork build
           prerelease: true
           body: |
-            Auto-built from commit ${{ github.sha }} on ${{ github.ref_name }}.
+            Auto-built from [`${{ steps.meta.outputs.short }}`](https://github.com/${{ github.repository }}/commit/${{ steps.meta.outputs.sha }}) on `main`.
 
             | File | Architecture |
             |------|-------------|
