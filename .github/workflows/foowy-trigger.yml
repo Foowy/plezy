@@ -1,0 +1,22 @@
+name: Trigger Fork Build
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  actions: write
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'foowy-release.yml',
+              ref: 'fork-ci',
+            });
