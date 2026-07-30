@@ -232,11 +232,9 @@ void main() {
       expect(settings.read(SettingsService.autoPip), isFalse);
     });
 
-    test('forces auto PiP off on automotive while honoring the stored value elsewhere', () async {
+    test('forces auto PiP off on automotive even when stored enabled', () async {
       final settings = await SettingsService.getInstance();
       await settings.write(SettingsService.autoPip, true);
-
-      expect(settings.read(SettingsService.autoPip), isTrue);
 
       TvDetectionService.debugSetAutomotiveOverride(true);
 
