@@ -15,6 +15,11 @@ ANDROID_15_INSTRUMENTATION_CLASSES = (
     "com.edde746.plezy.exoplayer.PlezyAudioModePlaybackTest"
 )
 ANDROID_15_INSTRUMENTATION_TARGET = "android-15-instrumentation"
+# Kept separate from the suites above: only one build type can host androidTest, and
+# those suites drive media3 builder APIs the app itself never calls, which R8 shrinks
+# legitimately. This class asserts only name-based reachability (#1703).
+ANDROID_R8_REACHABILITY_CLASSES = "androidx.media3.decoder.ffmpeg.FfmpegDecoderReachabilityTest"
+ANDROID_R8_REACHABILITY_TARGET = "android-r8-reachability"
 
 
 GROUPS: dict[str, tuple[tuple[str, ...], ...]] = {
@@ -48,6 +53,33 @@ GROUPS: dict[str, tuple[tuple[str, ...], ...]] = {
             "build/maestro-tv/next-episode.log",
             "--diagnostics-dir",
             "build/maestro-tv/next-episode-diagnostics",
+        ),
+        (
+            "basic",
+            "--flow",
+            ".maestro/regression_flows/07_sheet_back_dismiss.yaml",
+            "--jellyfin-log",
+            "build/maestro-sheets/back-dismiss.log",
+            "--diagnostics-dir",
+            "build/maestro-sheets/back-dismiss-diagnostics",
+        ),
+        (
+            "basic",
+            "--flow",
+            ".maestro/regression_flows/08_track_choice_survives_pending_pass.yaml",
+            "--jellyfin-log",
+            "build/maestro-tracks/pending-pass.log",
+            "--diagnostics-dir",
+            "build/maestro-tracks/pending-pass-diagnostics",
+        ),
+        (
+            "basic",
+            "--flow",
+            ".maestro/regression_flows/09_language_picker_locales.yaml",
+            "--jellyfin-log",
+            "build/maestro-i18n/language-picker.log",
+            "--diagnostics-dir",
+            "build/maestro-i18n/language-picker-diagnostics",
         ),
         (
             "basic",
@@ -106,6 +138,25 @@ GROUPS: dict[str, tuple[tuple[str, ...], ...]] = {
             "build/maestro-legacy/diagnostics",
         ),
     ),
+    # Real Android TV hardware only, so no workflow dispatches it. The three
+    # `tv` regressions above run on a phone emulator that `onboard_jellyfin_tv`
+    # forces into TV mode; this drives the rail layout a device reports on its
+    # own. The D-pad-only path is also the only way to reach the TV number
+    # spinner, which InputModeTracker hides as soon as a tap arrives. Run as
+    # `python3 scripts/run_maestro_ci.py android-tv-device` with
+    # MAESTRO_DEVICE_ID set to the box.
+    "android-tv-device": (
+        (
+            "basic",
+            "--adb-reverse",
+            "--flow",
+            ".maestro/regression_flows/10_tv_settings_navigation.yaml",
+            "--jellyfin-log",
+            "build/maestro-tv-device/settings-navigation.log",
+            "--diagnostics-dir",
+            "build/maestro-tv-device/settings-navigation-diagnostics",
+        ),
+    ),
 }
 
 
@@ -148,6 +199,26 @@ def run_android_15_instrumentation() -> None:
     )
 
 
+def run_android_r8_reachability() -> None:
+    print("==> Android R8 reachability", flush=True)
+    # The `minified` build type runs R8 over the app under test, so a keep rule that stops
+    # covering a reflective lookup, a JNI callback or a native library load fails here
+    # instead of shipping. No other gate in this repository runs R8 at all.
+    #
+    # compileFlutterBuildMinified is deliberately not excluded: CI only prebuilds the
+    # debug APK, so this variant has no Flutter outputs to reuse.
+    run_maestro._run_checked(
+        (
+            "android/gradlew",
+            "-p",
+            "android",
+            ":app:connectedMinifiedAndroidTest",
+            "-Pplezy.testBuildType=minified",
+            f"-Pandroid.testInstrumentationRunnerArguments.class={ANDROID_R8_REACHABILITY_CLASSES}",
+        )
+    )
+
+
 def run_recipes(recipes: tuple[tuple[str, ...], ...]) -> int:
     failed = False
     for arguments in recipes:
@@ -177,6 +248,9 @@ def run_target(name: str, *, disposable_emulator: bool = False) -> int:
     if name == ANDROID_15_INSTRUMENTATION_TARGET:
         run_android_15_instrumentation()
         return 0
+    if name == ANDROID_R8_REACHABILITY_TARGET:
+        run_android_r8_reachability()
+        return 0
     return run_group(name)
 
 
@@ -187,6 +261,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         choices=(
             *GROUPS,
             ANDROID_15_INSTRUMENTATION_TARGET,
+            ANDROID_R8_REACHABILITY_TARGET,
             *DESTRUCTIVE_MANUAL_TARGETS,
         ),
     )
