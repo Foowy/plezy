@@ -2,13 +2,19 @@ name: Fork Release
 
 on:
   workflow_dispatch:
+    inputs:
+      runner:
+        description: "Where to build (chaos = self-hosted, github = GitHub-hosted fallback)"
+        type: choice
+        options: [chaos, github]
+        default: chaos
 
 permissions:
   contents: write
 
 jobs:
   build-android:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runner == 'github' && '["ubuntu-latest"]' || '["self-hosted","chaos"]') }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -26,21 +32,39 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      - name: Use persistent caches (chaos)
+        if: inputs.runner != 'github'
+        run: |
+          c=/home/runner/_work/_cache
+          mkdir -p "$c"
+          {
+            echo "GRADLE_USER_HOME=$c/gradle"
+            echo "PUB_CACHE=$c/pub"
+            echo "ANDROID_HOME=$c/android-sdk"
+            echo "ANDROID_SDK_ROOT=$c/android-sdk"
+          } >> "$GITHUB_ENV"
+
+      - name: Setup Android SDK (chaos)
+        if: inputs.runner != 'github'
+        uses: android-actions/setup-android@v4
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: "3.47.1"
-          cache: true
+          cache: ${{ inputs.runner == 'github' }}
           pub-cache: false
 
       - name: Cache Pub dependencies
+        if: inputs.runner == 'github'
         uses: actions/cache@v5
         with:
           path: ~/.pub-cache
           key: ${{ runner.os }}-${{ runner.arch }}-pub-v2-${{ hashFiles('pubspec.yaml', 'pubspec.lock') }}
 
       - name: Cache Gradle
+        if: inputs.runner == 'github'
         uses: actions/cache@v5
         with:
           path: |
